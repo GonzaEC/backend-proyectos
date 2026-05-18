@@ -1,6 +1,6 @@
 # service-projects
 
-Microservicio de la plataforma **SIP** (Sistema de Inversión en Participaciones) responsable de la gestión de campos energéticos (proyectos de inversión en energía renovable).
+Microservicio de la plataforma **LIKEN** responsable de la gestión de campos energéticos (proyectos de inversión en energía renovable).
 
 ## Stack
 
@@ -138,13 +138,6 @@ src/main/java/com/plataforma/projects/
 
 ## Contexto del ecosistema
 
-Este servicio forma parte de la plataforma SIP junto con:
+Este servicio forma parte de la plataforma LIKEN junto con:
 
 - **service-users** — Auth JWT, usuarios, roles, wallet
-- **service-blockchain** — Smart contracts, mint/burn de tokens
-- **service-marketplace** — Mercado secundario P2P
-- **service-dividends** — Cálculo y distribución de dividendos
-- **service-wallet** — Pagos fiat, PSP
-- **service-kyc** — Verificación de identidad
-- **service-notify** — Notificaciones
-- **api-gateway** — Punto de entrada único
