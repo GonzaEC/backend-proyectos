@@ -64,7 +64,7 @@ La app queda disponible en `http://localhost:8081`.
 | `PORT` | Puerto del servidor | `8081` |
 | `FRONTEND_URL` | URL del frontend (CORS) | `http://localhost:5173` |
 
-## Endpoints principales
+## Endpoints
 
 Base path: `/api/projects`
 
@@ -73,15 +73,15 @@ Base path: `/api/projects`
 | `GET` | `/api/projects` | Público | Listar proyectos (filtros: `state`, `energyType`, paginación) |
 | `GET` | `/api/projects/{id}` | Público | Detalle de un proyecto |
 | `POST` | `/api/projects` | `project:create` | Crear proyecto (inicia en DRAFT) |
-| `PUT` | `/api/projects/{id}` | `project:update` | Editar metadata |
-| `DELETE` | `/api/projects/{id}` | `project:delete` | Soft delete (solo si está en DRAFT) |
-| `PUT` | `/api/projects/{id}/state` | `project:update` | Avanzar estado (`{ "state": "PRE_OPEN" }`) |
-| `GET` | `/api/projects/{id}/holders` | `project:read` | Holders con tokensAmount |
+| `PUT` | `/api/projects/{id}` | `project:update` + owner | Editar metadata |
+| `DELETE` | `/api/projects/{id}` | `project:delete` + owner | Soft delete |
+| `PUT` | `/api/projects/{id}/state` | `project:update` + owner | Cambiar estado |
+| `GET` | `/api/projects/{id}/holders` | `project:read` | Listar holders con tokensAmount |
 | `GET` | `/api/projects/{id}/metrics` | Público | Historial de métricas |
-| `POST` | `/api/projects/{id}/metrics` | `ADMIN` o owner | Registrar métrica de producción |
+| `POST` | `/api/projects/{id}/metrics` | `project:update` + owner ó `ROLE_ADMIN` | Registrar métrica |
 | `GET` | `/api/projects/{id}/documents` | `project:read` | Listar documentos |
-| `POST` | `/api/projects/{id}/documents` | `project:update` | Iniciar upload → devuelve presigned S3 URL |
-| `DELETE` | `/api/projects/{id}/documents/{docId}` | `project:delete` | Eliminar documento |
+| `POST` | `/api/projects/{id}/documents` | `project:update` + owner | Upload → presigned S3 URL |
+| `DELETE` | `/api/projects/{id}/documents/{docId}` | `project:delete` + owner | Eliminar documento |
 
 Todas las respuestas usan el wrapper:
 
@@ -98,10 +98,29 @@ Todas las respuestas usan el wrapper:
 
 ```
 DRAFT → PRE_OPEN → OPEN → CLOSED
+          ↓          ↓       ↓
+       CANCELLED  CANCELLED  ✗
 ```
 
-- Solo se puede avanzar en orden secuencial (no hay retroceso).
-- Solo proyectos en `DRAFT` pueden eliminarse (soft delete).
+- La progresión normal es secuencial y sin retroceso.
+- **Cancelación** (`CANCELLED`) es posible desde `DRAFT`, `PRE_OPEN` y `OPEN`.
+- Desde `OPEN`, **solo un admin** puede cancelar (hay inversores con tokens).
+- Desde `DRAFT` / `PRE_OPEN`, el dev owner también puede cancelar.
+- `CLOSED` y `CANCELLED` son estados finales — no se puede salir de ellos.
+- La baja (soft delete) está permitida en cualquier estado. Penalizaciones/reembolsos a definir.
+
+## Autorización por rol
+
+| Operación | admin | dev (owner) | dev (no owner) | investor |
+|-----------|-------|-------------|----------------|----------|
+| Ver proyectos / métricas | ✅ | ✅ | ✅ | ✅ |
+| Ver holders / documentos | ✅ | ✅ | ✅ | ✅ |
+| Crear proyecto | ✅ | ✅ | ✅ | ❌ |
+| Editar / subir doc / registrar métrica | ✅ | ✅ | ❌ | ❌ |
+| Avanzar estado (normal) | ✅ | ✅ | ❌ | ❌ |
+| Cancelar desde DRAFT / PRE_OPEN | ✅ | ✅ | ❌ | ❌ |
+| Cancelar desde OPEN | ✅ | ❌ | ❌ | ❌ |
+| Eliminar proyecto | ✅ | ✅ | ❌ | ❌ |
 
 ## Eventos Kafka
 
@@ -110,15 +129,15 @@ DRAFT → PRE_OPEN → OPEN → CLOSED
 | Tópico | Cuándo |
 |--------|--------|
 | `projects.created` | Al crear un proyecto |
-| `projects.state_changed` | Al cambiar el estado |
+| `projects.state_changed` | Al cambiar el estado (incluye cancelación) |
 | `projects.metrics_updated` | Al registrar una métrica |
 
 **Consume:**
 
-| Tópico | Para qué |
-|--------|---------|
-| `users.token_purchased` | Actualizar holdings del usuario |
-| `marketplace.order_matched` | Actualizar holdings tras venta P2P |
+| Tópico | Publicado por | Para qué |
+|--------|--------------|---------|
+| `users.token_purchased` | `service-users` | Actualizar holdings del usuario |
+| `marketplace.order_matched` | `service-marketplace` | Actualizar holdings tras venta P2P |
 
 ## Estructura de paquetes
 
@@ -141,3 +160,10 @@ src/main/java/com/plataforma/projects/
 Este servicio forma parte de la plataforma LIKEN junto con:
 
 - **service-users** — Auth JWT, usuarios, roles, wallet
+- **service-blockchain** — Smart contracts, mint/burn de tokens
+- **service-marketplace** — Mercado secundario P2P
+- **service-dividends** — Cálculo y distribución de dividendos
+- **service-wallet** — Pagos fiat, PSP
+- **service-kyc** — Verificación de identidad
+- **service-notify** — Notificaciones
+- **api-gateway** — Punto de entrada único
