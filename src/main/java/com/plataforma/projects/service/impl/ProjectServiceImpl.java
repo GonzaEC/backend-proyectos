@@ -47,6 +47,10 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     @Transactional
     public ProjectResponse createProject(ProjectRequest request, Long ownerId) {
+        if (request.getDescription() == null || request.getDescription().isBlank()) {
+            throw new IllegalArgumentException("La descripción del proyecto es obligatoria");
+        }
+
         Project project = Project.builder()
                 .name(request.getName())
                 .description(request.getDescription())
@@ -100,10 +104,8 @@ public class ProjectServiceImpl implements ProjectService {
         Project project = findActiveOrThrow(id);
         checkOwnership(project, requesterId, isAdmin);
 
-        if (!project.canBeDeleted()) {
-            throw new ProjectStateException("Solo se pueden eliminar proyectos en estado DRAFT");
-        }
-
+        // RF002.001.003: la baja es válida en cualquier estado.
+        // Penalizaciones económicas / reembolsos quedan a definir según proyecto.
         project.setActive(false);
         projectRepository.save(project);
     }
@@ -113,6 +115,17 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponse changeState(Long id, ProjectState newState, Long requesterId, boolean isAdmin) {
         Project project = findActiveOrThrow(id);
         checkOwnership(project, requesterId, isAdmin);
+
+        // Roles: admin | dev (owner) | investor
+        // Cancelación desde OPEN: solo admin puede hacerlo (ya hay inversores con tokens).
+        // Cancelación desde DRAFT / PRE_OPEN: el dev owner también puede.
+        if (newState == ProjectState.CANCELLED
+                && project.getState() == ProjectState.OPEN
+                && !isAdmin) {
+            throw new UnauthorizedProjectAccessException(
+                "Solo un administrador puede cancelar un proyecto que ya está abierto a inversiones"
+            );
+        }
 
         ProjectState oldState = project.getState();
         project.advanceState(newState);

@@ -25,7 +25,7 @@ public class Project extends Auditable {
     @Column(nullable = false)
     private String name;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
 
     @Column(name = "owner_id", nullable = false)
@@ -83,11 +83,20 @@ public class Project extends Auditable {
     // ── Lógica de negocio ────────────────────────────────────────────────────
 
     public boolean canAdvanceTo(ProjectState target) {
+        // Estados finales: no se puede salir de ellos
+        if (this.state == ProjectState.CLOSED || this.state == ProjectState.CANCELLED) {
+            return false;
+        }
+        // Cancelación permitida desde cualquier estado no-final
+        if (target == ProjectState.CANCELLED) {
+            return true;
+        }
+        // Progresión normal secuencial
         return switch (this.state) {
             case DRAFT    -> target == ProjectState.PRE_OPEN;
             case PRE_OPEN -> target == ProjectState.OPEN;
             case OPEN     -> target == ProjectState.CLOSED;
-            case CLOSED   -> false;
+            default       -> false;
         };
     }
 
@@ -102,9 +111,5 @@ public class Project extends Auditable {
 
     public boolean canReceiveInvestments() {
         return this.state == ProjectState.OPEN;
-    }
-
-    public boolean canBeDeleted() {
-        return this.state == ProjectState.DRAFT;
     }
 }
